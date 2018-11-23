@@ -1,0 +1,9 @@
+mysql_basics.txt	----->	数据库服务概述,构建MySQL服务器,数据库基本管理,MySQL数据类型
+mysql_2.0.txt	----->	约束条件,修改表结构,mysql键值	
+mysql_3.0.txt	----->	mysql存储引擎,数据导入导出,管理表记录,匹配条件
+mysql_4.0.txt	----->	多表查询,mysql管理工具,用户授权与撤销
+mysql_5.0.txt	----->	mysqldump,实时增量备份,innobackupex
+
+mysql_interview_questions.txt	----->	数据库考查面试知识点
+
+

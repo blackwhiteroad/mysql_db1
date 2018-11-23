@@ -1,0 +1,309 @@
+一.数据库服务概述
+1.什么是数据库?
+1)什么是数据库?
+2)E-R数据模型
+3)常见的数据库服务软件
+2.MySQL的特点及应用
+
+什么是数据库?
+*DB,DataBase
+-数据库:依照某种数据模型进行组织并存放到存储器的数据集合
+*DBMS,DataBase Management System
+-数据库管理系统:用来操纵和管理数据库的大型服务软件,eg:oracle,mysql,mariadb
+*DBS,DataBase System
+-数据库系统:即DB+DBMS,指带有数据库并整合了数据库管理软件的计算机系统
+
+E-R数据模型
+实体-关系模型
+Entity-Relationship Model
+[学号]	[姓名]	      [编号] [名称]	      [工号] [姓名]	
+[年龄]	 学生	  选课	  课程		任课	[教师]
+[性别]	[地址]	 [成绩]  [学分]		      [职称] [年龄]
+
+MySQL的特点及应用
+*主要特点
+-适用于中小规模,关系型数据库系统
+-支持linux/unix,window等多种操作系统
+-使用c和c++编写,可移植性强
+-通过API支持Python/Perl/PHP/Java等语言
+*典型应用环境
+-LAMP平台,与Apache HTTP Server组合
+-LNMP平台,与Nginx组合
+
+二.构建MySQL服务器
+1.MySQL安装
+1)MySQL安装前准备环境
+2)RPM方式安装MySQL数据库
+3)启动MySQL数据库服务器
+2.MySQL初始配置
+1)修改root口令
+2)MySQL服务相关参数
+
+MySQL安装
+*基本需求
+-采用RHEL7.4系统搭建MySQL服务器
+-关闭防火墙服务
+-关闭selinux
+-软件mysql-5.7.17.1
+
+bondle集合包:
+mysql-community-client-5.7.17-1.el7.x86_64			//客户端应用程序
+mysql-community-minimal-debuginfo-5.7.17-1.el7.x86_64	
+mysql-community-test-5.7.17-1.el7.x86_64
+mysql-community-common-5.7.17-1.el7.x86_64			//数据库和客户端库共享文件
+mysql-community-devel-5.7.17-1.el7.x86_64			//客户端应用程序的库和头文件
+mysql-community-libs-compat-5.7.17-1.el7.x86_64		//客户端应用程序的共享库
+mysql-community-libs-5.7.17-1.el7.x86_64			//MySQL数据库客户端应用程序的共享库
+mysql-community-embedded-5.7.17-1.el7.x86_64			//嵌入式函数库
+mysql-community-embedded-compat-5.7.17-1.el7.x86_64	//嵌入式兼容函数库
+mysql-community-embedded-devel-5.7.17-1.el7.x86_64		//头文件和库文件作为mysql的嵌入式库文件
+mysql-community-server-5.7.17-1.el7.x86_64
+
+mysql服务相关参数
+	文件		说明
+	/etc/my.cnf	主配置文件
+	/var/lib/mysql	数据库目录
+	/默认端口号	3306
+	进程名		mysqld
+	传输协议	TCP	
+	进程所有者	mysql
+	进程所数组	mysql
+validate_password_policy验证密码策略
+	0 or LOW		长度
+	1 or MEDIUM(默认)	长度:数字,小写/大写,和特殊字符
+	2 or STRONG		长度:数字,小写/大写,和特殊字符,字典文件
+
+1.使用mysql软件搭建数据库服务:
+-克隆1台REHL7虚拟机,配置如下:
+a.配置yum源
+vim /etc/yum.repos.d/mysql49.repo
+
+[mysql49]
+name=redhat
+baseurl=ftp://192.168.4.254/rhel7
+gpgcheck=0
+
+yum repolist
+b.设置ip地址
+nmcli connection modify eth0 ipv4.method manual ipv4.addresses 192.168.4.49/24 connection.autoconnect yes
+nmcli connection up eth0
+c.设置主机名
+hostnamectl set-hostname mysql49
+d.关闭防火墙
+systemctl stop firewalld
+e.临时关闭selinux服务
+setenforce 0
+
+-安装mysql数据库
+*如linux环境已有mariadb关系型数据库,需先将其卸载,操作如下:
+a.关闭数据库:systemctl stop mariadb
+b.卸载其相关软件:
+rpm -e --nodeps mariadb-server
+rpm -e --nodeps mariadb
+c.删除其相关文件
+rm -rf /etc/my.cnf
+rm -rf /var/lib/mysql/*
+*安装mysql软件
+注:scp mysql-5.7.17.tar root@192.168.4.49:/root/
+a.tar -xf mysql-5.7.17-1.el7.x86_64.rpm-bundle.tar
+b.rm -rf mysql-community-server-minimal-5.7.17-1.el7.x86_64.rpm
+c.yum -y install perl-JSON
+d.rpm -Uvh mysql-community-*.rpm	//升级安装
+e.rpm -qa | grep -i mysql
+*启动服务
+systemctl start mysqld
+*设置开机自启动
+systemctl enable mysqld
+*查看服务进程和端口号
+ps  -C mysqld 或 ps aux | grep mysqld --进程号
+netstat -utnlp | grep mysqld --端口号
+注:mysql服务脚本为:/usr/lib/systemd/system/mysqld.service
+
+2.数据库服务的基本使用
+1)修改密码策略:
+获取初始密码:grep password /var/log/mysqld.log
+登陆数据库:mysql -hlocalhost -uroot -p'---'
+获取相关密码信息:mysql>show variables like "%password%";	//报错,因首次登入,需更改密码后方能使用
+//修改root口令:如下3步
+只检查密码的长度:mysql>set global validate_password_policy=0;
+密码长度不能小于6个字符:mysql>set global validate_password_length=6;
+重新设置密码:mysql>alter user root@"localhost" identified by "123456";
+退出:mysql>quit
+重新登入数据库:mysql -hlocalhost -uroot -p123456
+让密码策略永久生效
+vim  /etc/my.cnf
+
+[mysqld]
+validate_password_policy=0
+validate_password_length=6
+
+systemctl restart mysqld
+
+三.数据库基本管理
+1.MySQL连接工具
+1)数据库存储流程
+2)连接MySQL服务器
+3)使用mysql>管理环境
+2.MySQL基本操作
+1)库管理命令
+2)表管理命令
+3)记录管理命令
+
+数据库存储流程
+*客户端把数据存储到服务器上的步骤
+连接数据库服务器
+建库			//类似于系统文件夹
+建表			//类似于系统文件
+插入记录		//类似于文件里的行
+断开连接
+
+连接MySQL服务器
+*使用mysql命令
+mysql [-h服务器 -u用户名 -p密码 数据库]
+quit 或 exit 退出
+
+使用mysql>管理环境
+*操作指令类型
+mysql指令:环境切换,看状态,退出等控制
+SQL指令:数据库定义/查询/操纵/授权语句
+*基本注意事项
+操作指令不区分大小写(密码,变量值除外)
+每条SQL指令以;结束或分隔
+不支持Tab键自动补齐
+\c可废弃当前编写错的操作指令
+*常用的SQL操作指令
+DDL数据定义语言(create,alter,drop)
+DML数据操作语言(insert,update,delete)
+DCL数据控制语言(grant,revoke)
+DTL数据事务语言(rollback,commit,savepoint)
+
+3.MySQL基本操作
+1)库管理命令
+*库类似于系统的文件夹
+show databases;		//显示已有的库
+use 库名;		//切换库
+select database();	//显示当前所在的库
+create database 库名;	//创建新库
+show tables;		//显示已有的库
+drop database 库名;	//删除库
+2)数据库的命名规则
+可以使用数字/字母/下划线,但不能纯数字
+区分大小写,具有唯一性
+不可使用指令关键字,特殊字符
+3)表管理指令
+*新建指定名称的表
+create table 库名.表名/表名(
+    字段名1 字段类型(宽度) 约束条件;
+    字段名2 字段类型(宽度) 约束条件;
+    ... ...
+    
+    字段名n 字段类型(宽度) 约束条件;
+);
+*表类似于系统的文件
+desc 表名;		//看表结构
+select * from 表名;	//查看表记录
+drop table 表名;	//删除表
+*记录管理命令
+select * from 表名;			//查看表记录
+insert into 表名 values(值列表);	//插入表记录
+update 表名 set 字段=值;		//修改表记录
+delete from 表名:			//删除表记录
+
+
+四.MySQL数据类型
+1.常见的信息种类
+2.数值类型
+3.字符类型
+4.日期时间类型
+5.枚举类型
+
+*常见的信息种类
+数值型:体重,身高,成绩,工资
+字符型:姓名,工作单位,通信地址
+枚举型:兴趣爱好,性别
+日期时间型:出生日期,注册时间
+
+*数值类型
+类型		大小	范围(有符号)		范围(无符号)		用途
+tinyint	1字节	-128~127		0~255			微小整数
+smallint	2字节	-32768~32767		0~65535		小整数
+mediumint	3字节	--2^23~2^23-1		0~2^24-1		中整数
+int		4字节	--2^31~2^31-1		0~2^32-1		大整数
+bigint	8字节	--2^63~2^63-1		0~2^64-1		极大整数
+float		4字节							单精度浮点数
+double	8字节							双精度浮点数
+decimal	对decimal(m,d),其中m为有效位数,d为小数位数,m应大于d,占用m+2个字节
+unsinged	使用无符号存储范围
+
+-浮点型
+定义格式:float(总宽度,小数位数)
+当字段值与类型不匹配时,字段值作为0处理
+数值超出范围时,仅保存最大/最小值
+
+-字符类型
+--定长:char(字符数)
+最大长度255字符
+不够指定字符数时在右边用空格补齐
+字符数超出时,无法写入数据
+--变长:varchar(字符数)
+按数据实际大小分配存储空间
+字符数超出时,无法写入数据
+--大文本类型:text/blob
+字符数大于65535存储时使用
+
+*日期时间类型
+-日期时间:datetime
+占用8个字节
+范围:1000-01-01 00:00:00.000000~9999-12-31 23:59:59.999999
+-日期时间:timestamp
+占用4个字节
+范围:1970-01-01 00:00:00.000000~2038-01-19 03:14:07.999999
+-日期,date
+占用4个字节
+范围:0001-01-01~9999-12-31
+-年份,year
+占用1个字节
+范围:1901~2155
+-时间,time
+占用3个字节
+格式:HH:MM:SS
+-关于日期时间字段
+当未给timestamp字段赋值时,自动以当前系统时间赋值,而datetime字段默认赋值为null
+-year年份的处理
+默认用4位数字表示
+当只用2位数字赋值时,
+01-69视为2001~2069
+70~99视为1970~1999
+
+*枚举类型
+-从给定值集合中选择单个值,enum
+定义格式:enum(值1,值2,值3,...)
+-从给定值集合中选择单个或多个值,set
+定义格式:set(值1,值2,值3,...)
+
+2)把数据存储在数据库服务器上的过程？
+连接数据库服务器（命令行   API    图形工具）
+选择库 （存放数据的文件夹）
+选择表 （就是文件）
+插入记录  （文件中的行）
+断开连接
+
+3)管理数据库的sql命令
+查看  show  databases;
+创建  create  database  库名；
+切换  use  库名；  
+删除  drop   database  库名；   
+显示当前所在的库      select  database();
+
+4)常用的SQL操作指令
+-DDL:数据定义语言(create,alter,drop)
+-DML:数据操作语言(insert,update,delete)
+-DCL:数据控制语言(grant,revoke)
+-DTL:数据事务语言(commit,rollback,savepoint)
+
+补充:
+*数据库存放图片,视频等文件的方法
+\d:page\dir\xxx.png(磁盘) ---> image(数据库)
+*char与varchar的区别
+char占用更多的内存空间,但性能快,不用计算值
+varchar经过计算后可节省内存空间,但性能较慢

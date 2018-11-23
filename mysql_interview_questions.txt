@@ -1,0 +1,210 @@
+1.简述当前主流数据库服务软件有哪些,开源且跨平台的数据库软件有哪些?
+解析:
+当前主流的数据库服务软件有:Oracle,DB2,SQL SERVER,MySQL等,其中只有MySQL是既开源又跨平台的数据库服务软件
+
+2.简述MySQL默认的4个库叫什么名字,哪个库里的数据不占用物理磁盘空间?
+解析:
+MySQL默认的4个库分别是information_schema,performance_schema,mysql,test,其中information_schema库不占用物理磁盘空间
+
+3.请列出MySQL常用的数据类型,并写出定义这些数据类型所用的关键字
+解析:
+MySQL常用的数据类型有:字符类型,数值类型,日期时间类型,枚举类型
+字符类型:char,varchar,blob,text
+数值类型:tinyint,int,smallingt,bigint,float,double
+枚举类型:enum,set
+日期时间类型:year,date,time,datetime,timestamp
+
+4.简述以下MySQL函数的功能
+year(),date(),month(),day(),time(),now()
+解析:
+year():获取指定时间中的年
+date():获取指定时间中的年月日
+month():获取指定时间中的月
+day():获取指定时间中的日期
+time():获取指定时间中的时间(时分秒)
+now    ():获取当前时间(年月日时分秒)
+
+
+
+
+
+
+
+
+
+
+
+
+1.简述索引的优点与缺点,默认情况下表使用哪个文件保存表的索引信息?
+解析:
+*索引的优点:加快查询表记录的速度
+*索引的缺点:会减慢写的速度(如:insert,update),占用物理存储空间
+*innodb存储引擎的表使用表名.ibd文件存储索引信息
+*myisam存储引擎的表使用表名.MYI文件存储索引信息
+
+2.列举出常用的3种索引类型,并说明约束规则
+解析:
+1)index普通索引
+*一个表中可以有多个index字段
+*字段的值允许有重复,且可以赋NULL值
+*经常把做查询条件的字段设置为index字段
+*index字段的key标志是MUL
+2)primary key主键
+*一个表中只能有一个primary key字段
+*对应的字段值不允许有重复,且不允许赋NULL值
+*如果有多个字段都作为PRIMARY KEY,称为复合主键,必须一起创建
+*主键字段的key标志是pri,通常与auto_increment连用
+*经常把表中能够唯一表识记录的字段设置为主键字段(如:记录编号字段)
+3)foreign key外键
+*表的存储引擎必须是innodb
+*字段的数据类型要匹配
+*被参考的字段必须是key中的一种(通常使用primary key)
+
+3.简述在表中创建外键字段要满足哪些条件?
+*foreign key外键使用规则如下
+-表的存储引擎必须是innodb
+-字段的数据类型要匹配
+-被参考的字段必须是key中的一种(通常使用primary key)
+
+4.innodb,myisam数据引擎文件相关的作用
+*innodb
+-xx.frm:表结构
+-xx.ibd:表数据,索引信息
+*myisam
+-xx.frm:表结构
+-xx.MYD:表数据
+-xx.MYI:表索引信息
+注:
+1)innodb支持行级锁,myisam支持表级锁  
+2)查询访问多的表适合使用myisam存储引擎,节省系统资源	eg:电子书
+  写访问多的表,适合使用innodb存储引擎,并发访问量大	eg:购物车
+
+5.简述MySQL体系结构的组成,并描述每个组成部分的作用
+解析:
+*连接池:检查是否有空闲的线程和是否有硬件资源分配给线程使用
+*sql接口:把SQL命令传递给mysqld进程
+*分析器:检查执行的SQL命令是否语法错误
+*优化器:优化执行的SQL命令,以最节省硬件资源的方式运行
+*查询缓存:存储客户端曾经查找过的sql记录
+*存储引擎:访问表时,决定对表加锁的粒度
+*文件系统:存储数据的存储设备(如硬盘)
+*管理工具:安装mysql数据库服务软件后自带的命令
+
+6.简述innodb存储引擎和myisam存储引擎的特点
+*innodb的特点:共享表空间,支持行级锁,支持外键,支持事务,植物事务回滚
+*myisam的特点:独享表空间,支持表级锁,不支持外键,事务,事务回滚
+
+7.简述MySQL数据库中插入,更新,查询,删除表记录的指令格式
+1)插入指令格式:
+#一次插入一条记录,给记录的所有字段赋值
+*insert into 库.表/表 values(值列表);
+#一次插入多条记录,给记录的所有字段赋值
+*insert into 库.表/表 values(值列表),(值列表);
+#一次插入一条记录,给记录的指定字段赋值
+*insert into 库.表/表(字段名列表) values(值列表);
+#一次插入多条记录,给记录的指定字段赋值
+*insert into 库.表/表(字段名列表) values(值列表),(值列表);
+2)更新记录指令格式
+//批量修改
+*update 表名 set 字段名=值,字段名="值";
+//修改符合条件的记录字段的值
+*update 表名 set 字段名=值,字段名="值" where 条件;
+3)查询记录指令格式
+//查询所有记录指定字段的值
+*select 字段列表 from 表名
+//查询与条件匹配记录指定字段的值
+*select 字段列表 from 表名 where 条件表达式列表
+4)删除表记录指令格式
+//删除表的所有记录
+*delete from 表名;
+//只删除符合条件的记录
+*delete from 表名 where 条件;
+
+8.常用的SQL操作指令
+DDL数据定义语言(create,alter,drop)
+DML数据操作语言(insert,update,delete)
+DCL数据控制语言(grant,revoke)
+DTL数据事务语言(rollback,commit,savepoint)
+
+9.键值类型
+index:普通索引
+unique:唯一索引
+fulltext:全文索引
+primary key:主键
+foreign key:外键
+
+10.索引优缺点
+-索引优点
+a.通过创建唯一性索引,可以保证数据库表中的每一行数据的唯一性
+b.可以加快数据的检索速度
+-索引有缺点
+a.当对表中的数据进行增加,删除和修改的时候,索引也要动态的维护,降低了数据的维护速度
+b.索引需要占用物理空间
+
+11.删除主[外]键的流程
+a.建库,表
+create database zhujian;
+create table zhu(
+id int not null primary key auto_increment,
+name char(10)
+);
+b.删除自增长属性
+alter table zhu modify id int not null;
+c.删除主键
+alter table zhu drop primary key;
+
+*mysql锁机制
+-锁粒度
+表级锁:一次直接对整张表进行加锁
+行级锁:只锁定某一行
+页级锁:对整个页面(mysql管理数据的基本存储单位)进行加锁
+--锁类型
+读锁(共享锁):支持并发读
+写锁(互斥锁,排他锁):时独占锁,上锁期间其他线程不能读表或写表
+-查看当前的锁状态
+命令行:show status like "table_lock%"
+
+*事务特性(acid)
+-atomic:原子性
+事务的整个操作是一个整体,不可分割,要么全部成功,要么全部失败
+-consistency:一致性
+事务操作的前后,表中的记录没有变化
+-isolation:隔离性
+事务操作是相互隔离不受影响的
+-durability:持久性
+数据一旦提交,不可改变,永久改变数据
+
+*数据导入
+-基本用法
+load data infile "目录名/文件名"
+into table 表名
+fields terminated by "分隔符'
+lines termiinated by "\n";
+-注意事项
+字段分隔符要与文件内的一致
+指定导入文件的绝对路径
+导入数据的表字段类型要与文件字段匹配
+禁用selinux保护机制
+
+*数据导出
+-基本用法
+SQL查询 into outfile "目录名/文件名"
+fields terminated by "分隔符'
+lines termiinated by "\n";
+-注意事项
+导出的内容由SQL查询语句决定
+导出的是表中的记录,不包括字段名
+禁用selinux保护机制
+
+*聚集函数
+-mysql内置数据统计函数
+avg(字段名)		//统计字段平均值
+sum(字段名)		//统计字段之和
+min(字段名)		//统计字段最小值
+max(字段名)		//统计字段最大值
+count(字段名)		//统计字段值个数
+
+
+
+
+
