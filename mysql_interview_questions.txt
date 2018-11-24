@@ -33,8 +33,6 @@ now    ():获取当前时间(年月日时分秒)
 
 
 
-
-
 1.简述索引的优点与缺点,默认情况下表使用哪个文件保存表的索引信息?
 解析:
 *索引的优点:加快查询表记录的速度
@@ -205,6 +203,52 @@ max(字段名)		//统计字段最大值
 count(字段名)		//统计字段值个数
 
 
+*配置master数据库服务器51
+]# vim /etc/my.cnf
+[mysql]
+... ...
+log_bin=master51
+server_id=51
+binlog_format="mixed"
+... ...
+]# systemctl restart mysqld
+]# ls /var/lib/mysql/master51.*
+]# mysql -uroot -p123456
+mysql> grant replication slave on *.* to repluser@"%" identified by "123456";
+mysql> show master status;
+
+*配置slave数据库服务器52
+]# vim /etc/my.cnf
+[mysql]
+... ...
+server_id=52
+... ...
+]# systemctl restart mysqld
+mysql> show slave status;
+]# mysql -uroot -p123456
+mysql> change master to
+    -> master_host="192.168.4.51",
+    -> master_user="repluser",
+    -> master_password="123456",
+    -> master_log_file="master51.000002",
+    -> master_log_pos=154;
+mysql> start slave;	//启用IO,SQL线程
+mysql> show slave status\G;
+注释:如配置错误,首先操作指令stop slave;后进行相应的修改,最后重启slave指令start slave;
+
+*在客户机50测试配置
+-master51先进行建库建表并授权
+mysql> create database db1;
+mysql> create table db1.a(id int);
+mysql> grant select,insert on db1.* to yaya100@"%" identified by "123456";
+-客户机50访问master51
+50]# mysql -h192.168.4.51 -uyaya100 -p123456
+mysql> insert into db1.a values(110),(119),(120);
+-slave52查询主从同步来的数据
+52]# mysql -uroot -p123456
+mysql> select * from db1.a;
+注:查看授权用户是否已经声称
+mysql> select user from mysql.user where user="yaya100";
 
 
 
