@@ -1,0 +1,272 @@
+一.mysqldump备份/恢复
+1.数据库备份概述
+1)数据备份方式
+2)数据备份策略
+2.物理热备:物理备份及恢复
+3.逻辑备份:逻辑备份及恢复
+
+*数据备份方式
+-物理备份
+冷备:cp,tar,.. ..
+-逻辑备份
+mysqldump
+mysql
+
+*数据备份策略
+-完全备份
+备份所有数据
+-增量备份
+备份上次备份后,所有新产生的数据
+-差异备份
+备份完全备份后,所有新产生的数据
+
+*物理热备:物理备份及恢复
+-备份操作
+cp -rp /var/lib/mysql/数据库 备份目录/文件名
+tar -zcvf xxx.tar.gz /var/lib/mysql/数据库/*
+-备份操作
+cp -rp 备份目录/文件名 /var/lib/mysql/数据库 
+tar -zxvf xxx.tar.gz -C /var/lib/mysql/数据库名/
+
+*逻辑备份:逻辑备份及恢复
+-备份操作
+mysqldump -uroot -p密码 库名 > 路径/xxx.sql
+-恢复操作
+mysql -uroot -p密码 库名 < 路径/xxx.sql
+--库名表示方式
+--all-database或-A		所有库
+数据库名			单个库
+数据库名 表名			单张表
+-B 数据库1 数据库2		多个库
+-注意事项:无论备份还是恢复,都要验证用户权限
+应用示例:
+a.将所有的库备份为mysql-all.sql文件
+]# mysqldump -uroot -p123456 -A > /mydata/mysql-all.sql;
+b.将userdb库备份为userdb.sql文件
+]# mysqldump -uroot -p123456 userdb > /mydata/userdb.sql;
+c.从备份文件userdb.sql重建userdb3库
+mysql> create database userdb3;
+]# mysql -uroot -p123456 < /mydata/userdb3;
+
+
+二.实时增量备份与恢复
+1.binlog日志简介
+2.使用binlog日志
+1)启用binlog日志
+2)清理binlog日志
+3)分析binlog日志
+3.利用binlog恢复数据
+
+*binlog日志简介
+二进制日志用途及配置方式
+类型		用途			配置
+二进制文件	记录所有更改数据的操作	log_bin[=dir/name]
+					server_id=数字
+					max_binlog_size=数字m
+
+*启用binlog日志
+-采用binlog日志的好处
+记录除查询之外的所有SQL命令
+可用于数据恢复
+配置mysql主从同步的必要条件
+]# vim /etc/my.cnf
+[mysql]
+... ...
+#log_bin
+log_bin=/logdir/lqx95diwang	//启用binlog日志
+server_id=50				//指定id值
+binlog_format="mixed"		//记录每一条修改数据的sql命令,并保存哪条记录被修改
+... ...
+]# systemctl restart mysqld
+
+*启用binlog日志
+-binlog相关文件
+主机名-bin.index		记录所有日志文件名
+主机名-bin.000001		第1个二进制日志
+主机名-bin.000002		第2个二进制日志
+.. ..
+补充:
+a.重启mysql服务
+b.执行sql操作:mysql>flush logs;
+c.mysqldump --flush-logs
+d.mysql -uroot -p密码 -e "flush logs"
+
+*清理binlog日志
+-删除早于指定版本的binlog日志
+purge master logs to "binlog文件名"
+-删除所有binlog日志,重建新日志
+reset master;
+
+*分析binlog日志
+-查看日志当前记录格式
+mysql> show variables like "binlog_format";
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| binlog_format | MIXED |
++---------------+-------+
+1 row in set (0.17 sec)
+注释:三种记录格式
+a.statement:每一条修改数据的sql命令都会记录在binlog日志中
+b.row:不记录sql语句上下文相关信息,仅保存哪条记录被修改
+c.mixed:是以上两种格式的混合使用
+-修改日志记录格式
+]# vim /etc/my.cnf
+[mysql]
+... ...
+binlog_format="mixed"
+... ...
+]# systemctl restart mysqld
+
+*利用binlog恢复数据
+-使用mysqlbinlog工具
+格式:mysqlbinlog [选项] binlog日志文件名
+-常用选项:
+--start-datetime="yyyy-mm-dd hh:mm:ss"
+--stop-datetime="yyyy-mm-dd hh:mm:ss"
+--start-position=数字
+--stop-position=数字
+-应用示例
+a.查看从2014年1月2日15:30开始的更改操作
+]# mysqlbinlog --start-datetime="2014-01-02 15:30:00" /var/lib/mysql/mysql-bin.000001
+b.把mysql-bin.000001数据恢复到数据库去
+-基本思路
+使用mysqlbinlog提取历史SQL操作
+通过管道交给mysql命令执行
+]# cd /var/lib/mysql/
+]# mysqlbinlog mysql-bin.000001 | mysql -uroot -p密码
+
+三.innobackupex备份/恢复
+1.mysql备份工具
+1)常用的mysql备份工具
+2)xtrabackup工具
+2.安装percona
+1)安装percona
+2)innobackupex基本选项
+3.innnobk应用案例
+1)完全备份与恢复
+2)增量备份与恢复
+3)从完全备份中恢复单个表
+
+*常用的mysql备份工具
+-物理备份缺点
+跨平台性差
+备份时间长,冗余备份,浪费存储空间
+-mysqldump备份缺点
+效率较低,备份和还原速度慢
+备份过程中,数据插入和更新操作会被挂起
+
+*xtrabackup工具
+-一款强大的在线热备份工具
+备份过程中不锁库表,适合生产环境
+由专业的组织percona提供(改进mysql分支)
+-主要含两个组件
+xtrabackup:C程序,支持innoDB/XtraDB
+innobackupex:以perl脚本封装xtrabackup,还支持myisam
+
+*安装percona
+下载适配的RPM包并安装:percona-xtrabackup-24-2.4.7-1.el7.x86_64.rpm
+]# yum -y install perl-DBD-MySQL perl-Digest-MD5 rsync
+]# yum -y install libev-4.15-1.el6.rf.x86_64.rpm
+]# percona-xtrabackup-24-2.4.7-1.el7.x86_64.rpm
+/usr/bin/innobackupex	//备份innodb,xtrdb,myisam引擎的表
+/usr/bin/xbcloud
+/usr/bin/xbcloud_osenv
+/usr/bin/xbcrypt
+/usr/bin/xbstream
+/usr/bin/xtrabackup	//备份innodb,xtrdb引擎的表
+/usr/share/doc/percona-xtrabackup-24-2.4.7
+/usr/share/doc/percona-xtrabackup-24-2.4.7/COPYING
+/usr/share/man/man1/innobackupex.1.gz
+/usr/share/man/man1/xbcrypt.1.gz
+/usr/share/man/man1/xbstream.1.gz
+/usr/share/man/man1/xtrabackup.1.gz
+
+*innobackupex基本选项
+	常用选项		含义
+	--host		主机名
+	--user		用户名
+	--port		端口号
+	--password		密码
+	--databases		数据库名
+	--no-tamestamp	不用日期命名备份文件存储的子目录名
+其中--databases选项
+--databases="库名"		//单个库
+--databases="库1 库2 .. .."	//多个库
+--databases="库名.表名"	//单个表
+
+	常用选项			含义
+	--redo-only			日志合并
+	--apply-log			准备还原(回滚日志)
+	--copy-back			恢复数据
+	--incremental 目录名	增量备份
+	--incremental-basedir=目录名	增量备份时,指定上一次备份数据存储的目录名
+	--incremental-dir=目录名	准备恢复数据时,指定增量备份数据存储的目录名
+	--export			导出表信息
+	--import			导入表空间
+
+*完全备份与恢复
+-应用示例:将所有库完全备份到/backup
+]# innobackupex --user root --password 123456 /backup --no-timestamp	//完全备份
+]# innobackupex --user root --password 123456 --apply-log /backup	//准备恢复数据
+]# rm -rf /var/lib/mysql	//恢复时要求空的库目录
+]# mkdir /var/lib/mysql
+}# innobackupex --user root --password 123456 --copy-back /backup
+]# chown -R mysql:mysql /var/lib/mysql
+]# systemctl restart mysqld
+
+*增量备份与恢复
+-应用示例
+增量备份时,必须先有一次备份,通常时完全备份
+]# innobackupex --user root --password 123456 --database="库名列表" /fullbak --no-timestamp	//完全备份
+]# innobackupex --user root --password 123456 --database="库名列表" --incremental /new1 --incremental-basedir="/fullbak" --no-timestamp	//第一次增量备
+]# innobackupex --user root --password 123456 --database="库名列表" --incremental /new2 --incremental-basedir="/new1" --no-timestamp	//第二次增量备
+]# rm -rf /var/lib/mysql	//恢复时要求空的库目录
+]# mkdir /var/lib/mysql
+]# innobackupex --user root --password 123456 --database="库名列表" --apply-log --redo-only /fullbak	//完全恢复
+]# innobackupex --user root --password 123456 --database="库名列表" --apply-log --redo-only /fullbak --incremental-dir="/new1"	//恢复增量
+]# innobackupex --user root --password 123456 --database="库名列表" --apply-log --redo-only /fullbak --incremental-dir="/new2"	//恢复增量
+]# innobackupex --user root --password 123456 --database="库名列表" --copy-back /fullbak	//拷贝文件
+
+]# chown -R mysql:mysql /var/lib/mysql
+]# systemctl restart mysqld
+
+*从完全备份中恢复单个表
+-应用示例
+完全备份数据库到/allbak目录
+导出表信息
+]# innobackupex --user root --password 123456 --database="gamedb" /allbak --no-timestamp	//完全备份
+>mysql drop table gamedb.a;
+]# innobackupex --user root --password 123456 --database="gamedb" --apply-log --export /allbak --no-timestamp	//导出表信息
+>mysql create table gamedb.a(id int);	//创建表
+>mysql alter table gamedb.a discard tablespace;	//删除表空间
+>mysql system cp /allbak/gamedb/a.{ibd,cfg,exp} /var/lib/mysql/gamedb	//拷贝表文件信息
+>mysql system chown mysql:mysql /var/lib/mysql/gamedb/a.*	//修改所有者
+>mysql alter table gamedb.a import tablespace;	//导入表空间
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
