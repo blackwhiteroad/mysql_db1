@@ -204,6 +204,44 @@ min(字段名)		//统计字段最小值
 max(字段名)		//统计字段最大值
 count(字段名)		//统计字段值个数
 
+*显示用户授权指令
+mysql> show grants for yaya100@"%";
++--------------------------------------------------+
+| Grants for yaya100@%                             |
++--------------------------------------------------+
+| GRANT USAGE ON *.* TO 'yaya100'@'%'              |
+| GRANT SELECT, INSERT ON `db1`.* TO 'yaya100'@'%' |
++--------------------------------------------------+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 *配置master数据库服务器51
 ]# vim /etc/my.cnf
 [mysql]
@@ -334,7 +372,7 @@ mysql> change master to
     -> master_host="192.168.4.53",
     -> master_user="repluser",
     -> master_password="123456",
-    -> master_log_file="master53.000001",
+    -> master_log_file="master53.000002",
     -> master_log_pos=441;
 mysql> change master to master_host="192.168.4.53",master_user="repluser",master_password="123456",master_log_file="master53.000001",master_log_pos=441;
 mysql> start slave;	//启用IO,SQL线程
@@ -346,19 +384,444 @@ mysql>show grants;
 数据库外部指令查看IO,SQL线程状态:
 ]# mysql -uroot -p123456 -e "show slave status\G" | grep -i yes
 
+*半同步复制模式
+数据库:mysql51,mysql53
+-模式配置
+查看是否允许动态加载模块(默认允许)
+mysql>show variables like "have_dynamic_loading";
+命令行加载插件(用户需有SUPER权限)
+mysql>INSTALL PLUGIN rpl_semi_sync_master SONAME 'semisync_master.so';	#主库上执行
+mysql>INSTALL PLUGIN rpl_semi_sync_slave SONAME 'semisync_slave.so';	#从库上执行
+mysql>SELECT PLUGIN_NAME,PLUGIN_STATUS FROM INFORMATION_SCHEMA.PLUGINS WHERE PLUGIN_NAME LIKE '%semi%';	#查看
+启用半同步复制(在安装为插件后,半同步复制默认是关闭的)
+mysql>SET GLOBAL rpl_semi_sync_master_enabled = 1;	#主库上执行
+mysql>SET GLOBAL rpl_semi_sync_slave_enabled = 1;	#从库上执行
+mysql>show variables like '%semi%_enabled';	#查看
+永久启用半同步复制(需要修改到主配置文件/etc/my.cnf,添加相关设置到[mysqld]部分)
+#主库的配置
+[mysqld]
+... ...
+plugin-load=rpl_semi_sync_master=semisync_master.so
+rpl_semi_sync_master_enabled=1
+... ...
+#从库的配置
+[mysqld]
+... ...
+plugin-load=rpl_semi_sync_slave=semisync_slave.so
+rpl_semi_sync_slave_enabled=1
+... ...
+#在高可用架构下,master和slave需同时启动,以便在切换后能继续使用半同步复制
+plugin-load="rpl_semi_sync_master=semisync_master.so;rpl_semi_sync_slave=semisync_slave.so"
+rpl_semi_sync_master_enabled=1
+rpl_semi_sync_slave_enabled=1
+
+注:mysql下重启mysqld服务
+mysql> system vim /etc/my.cnf
+mysql> system systemctl restart mysqld
+
+*读写分离配置
+数据库:mysql51(主,写),mysql53(从,读),mysql57(读写分离中间件),mysql50(客户机)
+a.装包:57]# rpm -ivh maxscale-2.1.2-1.rhel.7.x86_64.rpm
+b.配置57]# vim /etc/maxscale.cnf下的文件
+c.根据配置文件的设置添加对应的用户51,52(只需要配置在51的机器上即可,因51,52是主从复制服务器)
+mysql> grant replication slave, replication client on *.* to scalemon@"%" identified by "123456";
+mysql> grant select on mysql.* to pljadmin@"%" identified by "123456";
+注:
+1>.查看授权的用户是否生效
+select user,host from mysql.user where user in ("scalemon","pljadmin");
+2>测试用户登陆状态(mysql51,mysql53)
+57]# mysql -h192.168.4.51 -uscalemon -p123456
+57]# mysql -h192.168.4.51 -upljadmin -p123456
+
+d.启动数据读写分离服务
+57]# maxscale -f /etc/maxscale.cnf
+57]# ss/netstat -utnlp | grep maxscale	#查询相关进程,端口号
+注:必须关闭数据库服务软件
+57]# ss -utnlp | grep 3306
+57]# systemctl stop mysqld
+57]# systemctl enable mysqld
+停止数据读写分离服务
+57]# killall -9 maxscale
+e.查看数据读写分离服务的配置
+1>在57本机访问管理服务查看监控信息
+57]# maxadmin -uadmin -pmariadb -P4026
+[root@mycat57 ~]# maxadmin -uadmin -pmariadb -P4026
+MaxScale> list servers
+Servers.
+-------------------+-----------------+-------+-------------+--------------------
+Server             | Address         | Port  | Connections | Status              
+-------------------+-----------------+-------+-------------+--------------------
+server1            | 192.168.4.51    |  3306 |           0 | Master, Running
+server2            | 192.168.4.53    |  3306 |           0 | Slave, Running
+-------------------+-----------------+-------+-------------+--------------------
+MaxScale> exit
+2>客户端主机50连接57对数据做访问,测试能否实现读写分离
+注释:mysql53能够实现与mysql51同样的授权用户yaya
+mysql> grant select,insert on db1.* to yaya100@"%" identified by "123456";	#mysql53
+mysql> mysql -h192.168.4.57 -P4006 -uyaya100 -p123456	#mysql50	
+注释:读写分离实现效果为,客户端通过连接读写分离中间件插入数据时,能同步到所有数据库,因为是执行了mysql51(master,write),而通过直接在mysql53上插入数据,则不能实现同步所有数据库
+
+*显示用户授权指令
+mysql> show grants for yaya100@"%";
++--------------------------------------------------+
+| Grants for yaya100@%                             |
++--------------------------------------------------+
+| GRANT USAGE ON *.* TO 'yaya100'@'%'              |
+| GRANT SELECT, INSERT ON `db1`.* TO 'yaya100'@'%' |
++--------------------------------------------------+
+
+*MaxScale软件下载
+https://downloads.mariadb.com/MaxScale/
+或
+https://mariadb.com/downloads/#mariadbtx-mariadbmaxscale
+*mycat软件下载
+http://dl.mycat.io/
+
+***Mysql多实例(mysql50)
+软件包准备:mysql-5.7.20-linux-glibc2.12-x86_64.tar.gz
+50]# tar -zxvf mysql-5.7.20-linux-glibc2.12-x86_64.tar.gz
+50]# mv mysql-5.7.20-linux-glibc2.12-x86_64 /usr/local/mysql
+... ...
+
+*MHA集群
+a.配置两台slave从数据库mysql54,mysql55,mgm56
+54]# hostnamectl set-hostname slave54
+54]# nmcli connection modify eth0 ipv4.method manual ipv4.addresses 192.168.4.54/24 connection.autoconnect yes
+54]# nmcli connection up eth0
+
+55]# hostnamectl set-hostname slave55
+55]# nmcli connection modify eth0 ipv4.method manual ipv4.addresses 192.168.4.55/24 connection.autoconnect yes
+55]# nmcli connection up eth0
+
+56]# hostnamectl set-hostname mgm56
+56]# nmcli connection modify eth0 ipv4.method manual ipv4.addresses 192.168.4.56/24 connection.autoconnect yes
+56]# nmcli connection up eth0
+
+b.所有主机上(51-55)安装perl依赖包
+[root@rhel mha-soft-student]# scp perl* 192.168.4.51-56:/root/
+51-55]# yum -y install perl-*
+51-55]# yum -y install perl-*.rpm 
+
+c.在所有数据库服务器(51-55)上安装mba-node包
+[root@rhel mha-soft-student]# scp mha4mysql-node-0.56-0.el6.noarch.rpm 192.168.4.51-56:/root/
+51-55]# yum -y install perl-DBD-mysql perl-DBI
+51-55]# yum -y install mha4mysql-node-0.56-0.el6.noarch.rpm
+
+d.在管理主机上(56)安装mha_node和mha-manage包
+56]# yum -y install perl-*
+56]# yum -y install perl-DBD-mysql perl-DBI
+56]# yum -y install perl-ExtUtils-* perl-CPAN-*
+56]# yum -y install perl-*.rpm
+56]# yum -y install mha4mysql-node-0.56-0.el6.noarch.rpm
+56]# tar -zxf mha4mysql-manager-0.56.tar.gz
+56]# cd mha4mysql-manager-0.56/
+56]# perl Makefile.PL
+56 mha4mysql-manager-0.56]# make
+56 mha4mysql-manager-0.56]# make install
+*创建管理命令
+# 如果没有命令的话,执行如下操作创建
+56]# ls /usr/local/bin/masterha_*	#如有,则有以下输出
+/usr/local/bin/masterha_check_repl    /usr/local/bin/masterha_conf_host       /usr/local/bin/masterha_master_switch
+/usr/local/bin/masterha_check_ssh     /usr/local/bin/masterha_manager         /usr/local/bin/masterha_secondary_check
+/usr/local/bin/masterha_check_status  /usr/local/bin/masterha_master_monitor  /usr/local/bin/masterha_stop
+
+56]# cd mha4mysql-manager-0.56/
+56]# cp -r bin /root/
+56]# ls /root/bin
+*配置集群
+56]# mkdir /etc/mha/
+56]# cd mha4mysql-manager-0.56/samples/conf
+56]# cp app1.cnf /etc/mha
+56]# vim /etc/mha/app1.cnf
+[server default]
+manager_workdir=/etc/mha
+manager_log=/etc/mha/manager.log
+master_ip_failover_script=/usr/local/bin/master_ip_failover	//自动failover的切换脚本
+
+ssh_user=root
+ssh_port=22
+repl_user=repluser		//主从同步用户名
+repl_password=123456	//主从同步密码
+user=root			//数据库用户名
+password=123456		//数据库密码
+
+[server1]
+hostname=192.168.4.51
+port=3306
+candidate_master=1		//设置master
+
+[server2]
+hostname=192.168.4.52
+port=3306
+candidate_master=1		//设置为master
+
+[server3]
+hostname=192.168.4.53
+port=3306
+candidate_master=1		//设置为master
+
+[server4]
+hostname=192.168.4.54
+port=3306
+no_master=1			//不竞选master
+
+[server5]
+hostname=192.168.4.55
+port=3306
+no_master=1			//不竞选master
 
 
+56]# cp ../scripts/master_ip_failover /etc/mha/
+56]# chmod +x /etc/mha/master_ip_failover
+56]# vim /etc/mha/master_ip_failover
+... ...
+);
 
+my $vip = '192.168.4.100/24';   # Virtual IP
+my $key = "1";
+my $ssh_start_vip = "/sbin/ifconfig eth0:$key $vip";
+my $ssh_stop_vip = "/sbin/ifconfig eth0:$key down";
 
+GetOptions(
+... ...
+*在主数据库51|52|53服务器上添加授权用户
+51]# mysql -uroot -p123456
+51 mysql> grant all on *.* to root@"%" identified by "123456";
+*管理主机56上测试mysql
+#如果主机未安装mysql,则可以利用mariadb进行测试
+56]# yum -y install mariadb
+56]# mysql -h192.168.4.51-55 -uroot -p123456
+56 mysql>
+*把ip地址绑定在当前的主库服务器51的eth0接口
+51]# ifconfig eth0:1 192.168.4.100/24
+51]# ifconfig eth0:1	#测试是否成功
+*在管理主机56上测试配置
+56]# masterha_check_ssh --conf=/etc/mha/app1.cnf
+#成功提示信息
+[info] All SSH connection tests passed successfully.
+*测试主从同步设置
+56]# masterha_check_repl --conf=/etc/mha/app1.cnf
+#成功提示信息
+MySQL Replication Health is OK.
 
+e.所有节点之间(51-55)互相以ssh密钥方式登陆(实现无密码方式登陆)
+51-55]# ssh-keygen
+51-55]# ssh-copy-id 192.168.4.5x
+注释:测试密令ssh 192.168.4.52,看是否为无密码登陆
 
+f.配置56主机无密码ssh登陆所有数据节点主机
+56 mha4mysql-manager-0.56]# ssh-keygen
+56 mha4mysql-manager-0.56]# ssh-copy-id 192.168.4.5x
 
+g.master51数据库服务器配置文件
+51] vim /etc/my.cnf
+[mysqld]
+... ...
+log_bin=master51
+server_id=51
+binlog_format="mixed"
+validate_password_policy=0
+validate_password_length=6
+plugin-load="rpl_semi_sync_master=semisync_master.so;rpl_semi_sync_slave=semisync_slave.so"
+rpl_semi_sync_master_enabled=1
+rpl_semi_sync_slave_enabled=1
 
+relay_log_purge=0
+... ...
+51] systemctl restart mysqld
+51] mysql -uroot -p123456
+51 mysql> set global relay_log_purge=off;	//不自动删除本机的自动配置文件
+51 mysql> grant all on *.* to root@"%" identified by "123456";
+51 mysql> grant replication slave on *.* to repluser@"%" identified by "123456";
+51 mysql> show master status;
 
+h.master53数据库服务器配置文件
+53] vim /etc/my.cnf
+[mysqld]
+... ...
+log_bin=master53
+server_id=53
+binlog_format="mixed"
+validate_password_policy=0
+validate_password_length=6
+plugin-load="rpl_semi_sync_master=semisync_master.so;rpl_semi_sync_slave=semisync_slave.so"
+rpl_semi_sync_master_enabled=1
+rpl_semi_sync_slave_enabled=1
 
+relay_log_purge=0
+... ...
+53] systemctl restart mysqld
+53] mysql -uroot -p123456
+53 mysql> set global relay_log_purge=off;	//不自动删除本机的自动配置文件
+53 mysql> stop slave;
+53 mysql> change master to
+    -> master_host="192.168.4.51",
+    -> master_user="repluser",
+    -> master_password="123456",
+    -> master_log_file="master51.000006",
+    -> master_log_pos=154;
+53 mysql> start slave;
+53 mysql> show slave status\G;
+53 mysql> show master status;
 
+i.master52数据库服务器配置文件
+52] vim /etc/my.cnf
+[mysqld]
+... ...
+log_bin=master52
+server_id=52
+binlog_format="mixed"
+validate_password_policy=0
+validate_password_length=6
+plugin-load="rpl_semi_sync_master=semisync_master.so;rpl_semi_sync_slave=semisync_slave.so"
+rpl_semi_sync_master_enabled=1
+rpl_semi_sync_slave_enabled=1
 
+relay_log_purge=0
+... ...
+52] systemctl restart mysqld
+52] mysql -uroot -p123456
+52 mysql> set global relay_log_purge=off;	//不自动删除本机的自动配置文件
+52 mysql> stop slave;
+52 mysql> change master to
+    -> master_host="192.168.4.51",
+    -> master_user="repluser",
+    -> master_password="123456",
+    -> master_log_file="master51.000006",
+    -> master_log_pos=154;
+52 mysql> start slave;
+52 mysql> show slave status\G;
+52 mysql> show master status;
 
+j.slave54数据库服务器配置文件
+54]# vim /etc/my.cnf
+[mysqld]
+... ...
+server_id=54
+plugin-load=rpl_semi_sync_slave=semisync_slave.so
+rpl_semi_sync_slave_enabled=1
+
+relay_log_purge=0
+... ...
+54] systemctl restart mysqld
+54] mysql -uroot -p123456
+54 mysql> stop slave;
+54 mysql> change master to
+    -> master_host="192.168.4.51",
+    -> master_user="repluser",
+    -> master_password="123456",
+    -> master_log_file="master51.000006",
+    -> master_log_pos=154;
+54 mysql> start slave;
+54 mysql> show slave status\G;
+
+k.slave55数据库服务器配置文件
+55]# vim /etc/my.cnf
+[mysqld]
+... ...
+server_id=55
+plugin-load=rpl_semi_sync_slave=semisync_slave.so
+rpl_semi_sync_slave_enabled=1
+
+relay_log_purge=0
+... ...
+55] systemctl restart mysqld
+55] mysql -uroot -p123456
+55 mysql> stop slave;
+55 mysql> change master to
+    -> master_host="192.168.4.51",
+    -> master_user="repluser",
+    -> master_password="123456",
+    -> master_log_file="master51.000006",
+    -> master_log_pos=154;
+55 mysql> start slave;
+55 mysql> show slave status\G;
+
+l.验证配置
+*在主库51添加访问数据时的连接用户
+51 mysql> create database db8;
+51 mysql> create table db8.a(id int);
+51 mysql> grant select,insert on db8.* to yaya200@"%" identified by "123456";
+*在客户端50主机连接主数据库服务器51
+50] mysql -h192.168.4.51 -uyaya200 -p123456
+50 mysql> select * from db8.a;
+50 mysql> insert into db8.a values(9);
+50-55 mysql> select * from db8.a;
+
+***启动管理服务
+56]# masterha_manager --conf=/etc/mha/app1.cnf --remove_dead_master_conf --ignore_last_failover
+-打开新终端看状态信息
+56]# masterha_check_status --conf=/etc/mha/app1.cnf
+56]# ping -c 2 192.168.4.100
+-在客户端连接vip地址192.168.4.100访问数据库服务器
+50] mysql -h192.168.4.100 -uyaya200 -p123456
+mysql> select * from db8.a;
+mysql> select @@hostname;
+mysql> insert into db8.a values(99999);
+-停止主库51主机上的数据服务
+51]# systemctl stop mysqld
+-在客户端依然可以连接vip地址192.168.4.100访问数据库服务器
+50] mysql -h192.168.4.100 -uyaya200 -p123456
+mysql> select @@hostname;
+注释:
+1.使用masterha_manager工具
+--remove_dead_master_conf	#删除宕机主库配置 
+--ignore_last_failover		#忽略xxx.health文件
+masterha_check_status		#查看状态
+masterha_stop			#停止服务
+
+注释:
+删除mysql数据库相关文件:rm -fr mysql-community*
+[root@rhel mha-soft-student]# scp perl* 192.168.4.51:/root/
+yum -y install perl-*.rpm
+切换主机指令:ssh 192.168.4.5[ssh -X root@192.168.4.5]
+
+rm -rf perl*.rpm
+select user,host from mysql.user;
+select user,host from mysql.user where user="root";
+
+*查看mysql的IO线程
+show global variables like 'server_id';
+*查看mysql的PID号进程文件位置
+mysql> show variables like 'pid_file'\G;
+*************************** 1. row ***************************
+Variable_name: pid_file
+        Value: /var/run/mysqld/mysqld.pid
+
+show variables like '%log_bin%';
+system vim /etc/my.cnf
+log-bin=mysql-bin
+binlog_format=mixed
+system systemctl restart mysqld
+开启了二进制日志，之后做的所有和修改数据表有关的操作都会被记录。
+修改 my.ini文件
+加入以下语句(在没有设置的前提下)
+复制代码代码如下:
+log-error=d:/log/mysql/mysql_log_err.txt
+log=d:/log/mysql/mysql_log.txt
+#log-bin=d:/log/mysql/mysql_log_bin
+log-slow-queries= d:/log/mysql/mysql_log_slow.txt
+
+***搭建MHA克隆系统的致命错误(生产环境必须保证原生)
+**克隆错误信息提示
+Sat Dec  8 21:59:09 2018 - [error][/usr/local/share/perl5/MHA/Server.pm, ln485] Slave IO thread is not running on 192.168.4.54(192.168.4.54:3306)
+Sat Dec  8 21:59:09 2018 - [error][/usr/local/share/perl5/MHA/ServerManager.pm, ln1526]  failed!
+Sat Dec  8 21:59:09 2018 - [error][/usr/local/share/perl5/MHA/MasterMonitor.pm, ln424] Error happened on checking configurations.  at /usr/local/share/perl5/MHA/MasterMonitor.pm line 417.
+Sat Dec  8 21:59:09 2018 - [error][/usr/local/share/perl5/MHA/MasterMonitor.pm, ln523] Error happened on monitoring servers.
+Sat Dec  8 21:59:09 2018 - [info] Got exit code 1 (Not master dead).
+
+55|54]# vim /var/lib/mysql/auto.cnf
+[auto]
+server-uuid=fd208e3a-f0b6-11e8-886e-52540071cc62
+注:server-uuid不能重复
+55|54]# systemctl restart mysqld
+
+55|54]# cp /etc/mha/master_ip_failover /usr/local/bin/
+#master_ip_failover_script=/usr/local/bin/master_ip_failover
+55|54]# vim /usr/local/bin/master_ip_failover
+98 ## Update master ip on the catalog database, etc
+99 FIXME_xxx;	//此行注释
+masterha_check_repl --conf=/etc/mha/app1.cnf
 
 
 
