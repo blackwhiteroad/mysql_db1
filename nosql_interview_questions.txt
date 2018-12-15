@@ -1,0 +1,1009 @@
+***NOSQL
+**部署redis服务51,52
+*装包
+51]# systemctl stop mysqld
+51]# yum -y install gcc
+51]# rpm -qa | grep -i gcc
+51]# tar -zxvf redis-4.0.8.tar.gz
+51]# cd redis-4.0.8/
+51]# make
+51]# make install
+*初始化配置
+51 redis-4.0.8]# ./utils/install_server.sh
+Selected config:
+Port           : 6379
+Config file    : /etc/redis/6379.conf
+Log file       : /var/log/redis_6379.log
+Data dir       : /var/lib/redis/6379
+Executable     : /usr/local/bin/redis-server
+Cli Executable : /usr/local/bin/redis-cli
+*查看服务运行状态
+51]# /etc/init.d/redis_6379 status
+-查看监听的端口
+51]# netstat -utnlp | grep :6379
+51]# ps -C redis_server
+*停止服务
+51]# /etc/init.d/redis_6379 stop
+*开始服务
+51]# /etc/init.d/redis_6379 start
+*连接Redis数据库服务
+redis-4.0.8]# redis-cli
+127.0.0.1:6379>
+注:redis与memcached的区别
+1.redis可把数据存储到物理硬盘,memcached不能;
+2.redis支持多种数据类型,memcached只能支持int与string数据类型
+
+**配置文件解析
+-修改端口
+51]# vim /etc/redis/6379.conf
+93 port 6350	//原6379
+51]# /etc/init.d/redis_6379 stop
+51]# /etc/init.d/redis_6379 start
+51]# netstat -utnlp | grep :6350
+51]# redis-cli -p 6350
+51]# redis-cli -p 6350 shutdown
+51]# netstat -utnlp | grep :6350
+-修改IP,端口
+51]# vim /etc/redis/6379.conf
+70 bind 192.168.4.51 127.0.0.1	//原bind 127.0.0.1
+93 port 6351	//原6379
+51]# /etc/init.d/redis_6379 stop
+51]# /etc/init.d/redis_6379 start
+51]# netstat -utnlp | grep :6350
+51]# redis-cli -h 192.168.4.51 -p 6350
+51]# redis-cli -h 192.168.4.51 -p 6350 shutdown
+51]# netstat -utnlp | grep :6350
+-修改IP,端口,设置redis服务设置连接密码
+51]# vim /etc/redis/6379.conf
+70 bind 192.168.4.51 127.0.0.1	//原bind 127.0.0.1
+93 port 6350	//原6379
+501 # requirepass foobared
+502 requirepass 123456
+51]# /etc/init.d/redis_6379 stop
+51]# /etc/init.d/redis_6379 start
+51]# netstat -utnlp | grep :6350
+51]# redis-cli -h 192.168.4.51 -p 6350	//开启连接服务 or redis-cli -h 192.168.4.51 -p 6350 -a 123456
+192.168.4.51:6350> ping
+(error) NOAUTH Authentication required.
+192.168.4.51:6350> auth 123456
+OK
+192.168.4.51:6350> ping
+PONG
+192.168.4.51:6350>
+51]# redis-cli -h 192.168.4.51 -p 6350 -a 123456 shutdown	//关闭连接服务 or 192.168.4.51:6350> shutdown
+51]# netstat -utnlp | grep :6350
+*修改脚本使其可以使用脚本停止服务
+51]# vim /etc/init.d/redis_6379
+43 #            $CLIEXEC -p $REDISPORT shutdown
+44             $CLIEXEC -h 192.168.4.51 -p 6350 -a 123456 shutdown
+51]# /etc/init.d/redis_6379 start
+51]# redis-cli -h 192.168.4.51 -p 6350 -a 123456
+51]# /etc/init.d/redis_6379 stop
+51]# netstat -utnlp | grep :6350
+
+***LAMP(56)+Redis(51,52)
+56]# systemctl stop mysqld
+56]# systemctl stop httpd
+56]# /usr/local/mycat/bin/mycat stop
+**安装源码nginx和PHP
+56]# ]# yum -y install gcc gcc-c++ pcre-devel zlib-devel
+56]# tar -zxf nginx-1.12.2.tar.gz
+56]# cd nginx-1.12.2/
+56]# ./configure --prefix=/usr/local/nginx
+]# make && make install
+]# ss -untpl | grep :80
+]# /usr/local/nginx/sbin/nginx
+]# yum -y install php-common
+]# yum -y install php-fpm-5.4.16-42.el7.x86_64.rpm 
+56]# systemctl start php-fpm
+]# ss -untpl | grep :9000
+]# echo 123 > /usr/local/nginx/html/a.html
+]# /usr/local/nginx/sbin/nginx 
+]# curl http://localhost/a.html
+]# vim /usr/local/nginx/conf/nginx.conf
+        location ~ \.php$ {
+            root           html;
+            fastcgi_pass   127.0.0.1:9000;
+            fastcgi_index  index.php;
+        #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
+        #    include        fastcgi_params;
+            include        fastcgi.conf;
+]# /usr/local/nginx/sbin/nginx -s stop
+]# /usr/local/nginx/sbin/nginx
+]# ss -untpl | grep :80
+]# vim /usr/local/nginx/html/b.php
+<?php
+echo "hello world";
+?>
+]# firefox http://localhost/b.php
+
+**配置php支持Redis
+*安装php扩展
+]# yum -y install autoconf automake
+]# rpm -q php
+]# yum -y install php
+]# yum -y install php-devel-5.4.16-42.el7.x86_64.rpm
+]# tar -zxf php-redis-2.2.4.tar.gz
+]# php -m | grep -i redis
+]# cd phpredis-2.2.4/
+]# /usr/bin/phpize
+Configuring for:
+PHP Api Version:         20100412
+Zend Module Api No:      20100525
+Zend Extension Api No:   220100525
+]# ./configure --with-php-config=/usr/bin/php-config
+]# make && make install
+]# make install
+Installing shared extensions:     /usr/lib64/php/modules/
+]# ls /usr/lib64/php/modules/	//redis.so功能模块
+curl.so  fileinfo.so  json.so  phar.so  redis.so  zip.so
+]# vim /etc/php.ini
+728 extension_dir = "/usr/lib64/php/modules/"	//配置路径
+730 extension = "redis.so"	//配置路径下的模块名
+]# systemctl stop php-fpm
+]# systemctl start php-fpm
+*测试文件
+]# vim /usr/local/nginx/html/redis.php
+<?php
+$redis=new redis();
+$redis->connect('192.168.4.51',6351);
+$redis->auth("123456");
+$redis->set('name','杨');
+echo $redis->get('name');
+?>
+
+***配置redis集群
+**部署redis服务51,52
+*关闭密码,回环地址127.0.0.1,重启redis服务
+51-52]# vim /etc/redis/6379.conf
+70 bind 192.168.4.51
+502 requirepass 123456
+51-52]# /etc/init.d/redis_6379 start
+**部署redis服务53-55,58
+*装包
+rhel]# scp redis-4.0.8.tar.gz 192.168.4.52:/root/
+53-55,58]# systemctl stop mysqld
+53-55,58]# yum -y install gcc
+53-55,58]# rpm -qa | grep -i gcc
+53-55,58]# tar -zxvf redis-4.0.8.tar.gz
+53-55,58]# cd redis-4.0.8/
+53-55,58]# make
+53-55,58]# make install
+*初始化配置
+53-55,58 redis-4.0.8]# ./utils/install_server.sh
+Selected config:
+Port           : 6379
+Config file    : /etc/redis/6379.conf
+Log file       : /var/log/redis_6379.log
+Data dir       : /var/lib/redis/6379
+Executable     : /usr/local/bin/redis-server
+Cli Executable : /usr/local/bin/redis-cli
+*查看服务运行状态
+53-55,58]# /etc/init.d/redis_6379 status
+-查看监听的端口
+53-55,58]# netstat -utnlp | grep :6379
+53-55,58]# ps -C redis_server
+*停止服务
+53-55,58]# /etc/init.d/redis_6379 stop
+*开始服务
+53-55,58]# /etc/init.d/redis_6379 start
+*连接Redis数据库服务
+53-55,58 redis-4.0.8]# redis-cli
+**配置文件解析
+-修改IP,端口,设置redis服务设置连接密码
+53-55,58 ]# vim /etc/redis/6379.conf
+70 bind 192.168.4.51	//修改ip
+93 port 6351	//原6379	//不允许相同,只指定物理接口的ip
+137 daemonize yes		//以守护进程方式运行
+159 pidfile /var/run/redis_6351.pid	
+816 cluster-enabled yes	//是否启用集群,前提是以守护进程方式运行
+824 cluster-config-file nodes-6351.conf	//存储集群信息的配置文件,自动生成,不允许相同
+830 cluster-node-timeout 5000	//集群节点通信超时时长
+53-55,58 ]# /etc/init.d/redis_6379 stop
+53-55,58 ]# /etc/init.d/redis_6379 start
+53-55,58 ]# netstat -utnlp | grep :6350
+53-55,58 ]# redis-cli -h 192.168.4.51 -p 6350
+53-55,58 ]# redis-cli -h 192.168.4.51 -p 6351 shutdown
+53-55,58 ]# netstat -utnlp | grep redis-server
+tcp        0      0 192.168.4.52:6352       0.0.0.0:*               LISTEN      26045/redis-server  
+tcp        0      0 192.168.4.52:16352      0.0.0.0:*               LISTEN      26045/redis-server 
+51]# ls /var/lib/redis/6379/	//集群配置文件信息
+dump.rdb  nodes-6352.conf
+or
+51]# redis-cli -h 192.168.4.51 -p 6350
+192.168.4.52:6352> cluster nodes	//集群配置文件信息
+cefbb7a9688669884a9f83b423e52b6e20b2afd9 :6352@16352 myself,master - 0 0 0 connected
+192.168.4.52:6352> 
+**创建集群脚本(51)
+51]# scp redis-3.2.1.gem 192.168.4.51:/root/
+51]# scp ruby-devel-2.0.0.648-30.el7.x86_64.rpm 192.168.4.51:/root/
+yum -y install ruby rubygems
+]# rpm -ivh --nodeps ruby-devel-2.0.0.648-30.el7.x86_64.rpm
+]# gem install redis-3.2.1.gem 
+]# cd redis-4.0.8/src/
+]# echo $PATH
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin
+]# mkdir /root/bin
+]# cp redis-trib.rb /root/bin/
+]# ls /root/bin/
+]# redis-trib.rb create --replicas 1 192.168.4.51:6351 192.168.4.52:6352 192.168.4.53:6353 192.168.4.54:6354 192.168.4.55:6355 192.168.4.58:6358
+**测试集群
+50]# redis-cli -c -h 192.168.4.51 -p 6351
+192.168.4.51:6351> set k 4
+-> Redirected to slot [7629] located at 192.168.4.52:6352	//自动分配哪个主服务器
+OK
+192.168.4.52:6352> set x 1
+-> Redirected to slot [16287] located at 192.168.4.53:6353
+OK
+192.168.4.53:6353> set y 2
+OK
+192.168.4.53:6353> set z 3
+-> Redirected to slot [8157] located at 192.168.4.52:6352
+OK
+52 ]# redis-cli -h 192.168.4.52 -p 6352
+192.168.4.52:6352> keys *
+1) "k"
+192.168.4.52:6352> get k
+"4"
+52 ]# redis-cli -h 192.168.4.52 -p 6352	//从服务器,不能获取,只能用keys *获取
+192.168.4.58:6358> keys *
+1) "k"
+192.168.4.58:6358> get k
+(error) MOVED 7629 192.168.4.52:6352
+192.168.4.58:6358> 
+注释:当redis集群报错slots已存在时,可把如下文件删除掉
+51]# ls /var/lib/redis/6379/
+dump.rdb  nodes-6351.conf
+**测试主库宕机,恢复
+52]# redis-cli -h 192.168.4.52 -p 6352 shutdown
+51]# redis-trib.rb check 192.168.4.51:6351	//检测集群
+>>> Performing Cluster Check (using node 192.168.4.51:6351)
+M: a671f0e08439beafdd2fbea68fa69a6103c12061 192.168.4.51:6351
+   slots:0-5460 (5461 slots) master
+   1 additional replica(s)
+M: 8a96475c7d4c08e08a215df229770907bd856119 192.168.4.53:6353
+   slots:10923-16383 (5461 slots) master
+   1 additional replica(s)
+M: 1ffc6750bed807f0b79791cc2a3f7c2bea160324 192.168.4.58:6358
+   slots:5461-10922 (5462 slots) master
+   0 additional replica(s)
+S: 6c590182e3d205e69c13e82a59100ef3015a6270 192.168.4.55:6355
+   slots: (0 slots) slave
+   replicates a671f0e08439beafdd2fbea68fa69a6103c12061
+S: 3c56d92b8da984234ba6670bdc7303a4c0577eb4 192.168.4.54:6354
+   slots: (0 slots) slave
+   replicates 8a96475c7d4c08e08a215df229770907bd856119
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+]# redis-cli -c -h 192.168.4.51 -p 6351
+192.168.4.51:6351> set a 3
+-> Redirected to slot [15495] located at 192.168.4.53:6353
+OK
+192.168.4.53:6353> set b 3
+-> Redirected to slot [3300] located at 192.168.4.51:6351
+OK
+192.168.4.51:6351> set c 3
+-> Redirected to slot [7365] located at 192.168.4.58:6358	//52的从数据库自动升级为主数据库
+OK
+192.168.4.58:6358> set d 3
+-> Redirected to slot [11298] located at 192.168.4.53:6353
+OK
+52]# /etc/init.d/redis_6379 start  //恢复58主数据库数据,成为58的从数据库
+Starting Redis server...
+52]# redis-cli -h 192.168.4.52 -p 6352
+192.168.4.52:6352> keys *
+1) "k"
+2) "z"
+3) "c"
+192.168.4.52:6352> get c
+(error) MOVED 7365 192.168.4.58:6358
+192.168.4.52:6352> get z
+(error) MOVED 8157 192.168.4.58:6358
+192.168.4.52:6352> 
+52]# redis-cli -h 192.168.4.58 -p 6358	
+192.168.4.58:6358> keys *
+1) "c"
+2) "z"
+3) "k"
+192.168.4.58:6358> get c
+"3"
+192.168.4.58:6358> get z
+"3"
+192.168.4.58:6358> get k
+"4"
+192.168.4.58:6358> 
+
+**部署redis服务57,59
+*装包
+rhel]# scp redis-4.0.8.tar.gz 192.168.4.52:/root/
+57,59]# ssh 192.168.4.59
+57,59]# systemctl stop mysqld
+57,59]# yum -y install gcc
+57,59]# rpm -qa | grep -i gcc
+57,59]# tar -zxvf redis-4.0.8.tar.gz
+57,59]# cd redis-4.0.8/
+57,59]# make
+57,59]# make install
+*初始化配置
+57,59 redis-4.0.8]# ./utils/install_server.sh
+Selected config:
+Port           : 6379
+Config file    : /etc/redis/6379.conf
+Log file       : /var/log/redis_6379.log
+Data dir       : /var/lib/redis/6379
+Executable     : /usr/local/bin/redis-server
+Cli Executable : /usr/local/bin/redis-cli
+*查看服务运行状态
+57,59]# /etc/init.d/redis_6379 status
+-查看监听的端口
+57,59]# netstat -utnlp | grep :6379
+57,59]# ps -C redis_server
+*停止服务
+57,59]# /etc/init.d/redis_6379 stop
+*开始服务
+57,59]# /etc/init.d/redis_6379 start
+*连接Redis数据库服务
+57,59 redis-4.0.8]# redis-cli
+**配置文件解析
+-修改IP,端口,设置redis服务设置连接密码
+57,59 ]# vim /etc/redis/6379.conf
+70 bind 192.168.4.51	//修改ip
+93 port 6351	//原6379	//不允许相同,只指定物理接口的ip
+137 daemonize yes		//以守护进程方式运行
+159 pidfile /var/run/redis_6351.pid	
+816 cluster-enabled yes	//是否启用集群,前提是以守护进程方式运行
+824 cluster-config-file nodes-6351.conf	//存储集群信息的配置文件,自动生成,不允许相同
+830 cluster-node-timeout 5000	//集群节点通信超时时长
+57,59]# /etc/init.d/redis_6379 stop
+57,59# /etc/init.d/redis_6379 start
+57,59]# netstat -utnlp | grep :6350
+57,59]# redis-cli -h 192.168.4.51 -p 6350
+57,59]# redis-cli -h 192.168.4.51 -p 6351 shutdown
+57,59]# netstat -utnlp | grep redis-server
+tcp        0      0 192.168.4.52:6352       0.0.0.0:*               LISTEN      26045/redis-server  
+tcp        0      0 192.168.4.52:16352      0.0.0.0:*               LISTEN      26045/redis-server 
+51]# ls /var/lib/redis/6379/	//集群配置文件信息
+dump.rdb  nodes-6352.conf
+or
+57,59]# redis-cli -h 192.168.4.51 -p 6350
+192.168.4.52:6352> cluster nodes	//集群配置文件信息
+cefbb7a9688669884a9f83b423e52b6e20b2afd9 :6352@16352 myself,master - 0 0 0 connected
+192.168.4.52:6352> 
+51]# redis-trib.rb add-node 192.168.4.57:6357 192.168.4.51:6351	//添加集群主机
+51]# redis-trib.rb check 192.168.4.51:6351	//检测集群
+51]# redis-trib.rb reshard 192.168.4.57:6357	//分片迁移,reshard重新分配hash槽(slots)
+>>> Performing Cluster Check (using node 192.168.4.57:6357)
+M: 72f57fe19645f8a535e6ce7e61c1665cfb89ff81 192.168.4.57:6357
+   slots: (0 slots) master
+   0 additional replica(s)
+M: 1ffc6750bed807f0b79791cc2a3f7c2bea160324 192.168.4.58:6358
+   slots:5461-10922 (5462 slots) master
+   1 additional replica(s)
+S: 6c590182e3d205e69c13e82a59100ef3015a6270 192.168.4.55:6355
+   slots: (0 slots) slave
+   replicates a671f0e08439beafdd2fbea68fa69a6103c12061
+M: 8a96475c7d4c08e08a215df229770907bd856119 192.168.4.53:6353
+   slots:10923-16383 (5461 slots) master
+   1 additional replica(s)
+S: 3c56d92b8da984234ba6670bdc7303a4c0577eb4 192.168.4.54:6354
+   slots: (0 slots) slave
+   replicates 8a96475c7d4c08e08a215df229770907bd856119
+S: cefbb7a9688669884a9f83b423e52b6e20b2afd9 192.168.4.52:6352
+   slots: (0 slots) slave
+   replicates 1ffc6750bed807f0b79791cc2a3f7c2bea160324
+M: a671f0e08439beafdd2fbea68fa69a6103c12061 192.168.4.51:6351
+   slots:0-5460 (5461 slots) master
+   1 additional replica(s)
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+How many slots do you want to move (from 1 to 16384)? 4096	//16384(总槽数)/4(主服务器个数)=4096(单个主服务器的槽数)
+What is the receiving node ID? 72f57fe19645f8a535e6ce7e61c1665cfb89ff81	//添加的主服务器的id
+Please enter all the source node IDs.
+  Type 'all' to use all the nodes as source nodes for the hash slots.
+  Type 'done' once you entered all the source nodes IDs.
+Source node #1:all	//自动分配
+51]# redis-trib.rb check 192.168.4.57:6357
+51]# redis-trib.rb add-node --slave 192.168.4.59:6359 192.168.4.51:6351	//增加59从服务器,默认添加到主服务器中从服务器少的地方
+51]# redis-trib.rb check 192.168.4.57:6357
+57]# redis-cli -h 192.168.4.57 -p 6357
+192.168.4.57:6357> keys *
+1) "y"
+2) "d"
+59]# redis-cli -h 192.168.4.59 -p 6359
+192.168.4.59:6359> ping 
+PONG
+192.168.4.59:6359> keys *
+1) "d"
+2) "y"
+192.168.4.59:6359> 
+**删除59从服务器的节点信息
+51]# redis-trib.rb del-node 192.168.4.51:6351 64475c2915896f1b7d788b63847d3de1ecf867e7	//从库id
+>>> Removing node 64475c2915896f1b7d788b63847d3de1ecf867e7 from cluster 192.168.4.51:6351
+>>> Sending CLUSTER FORGET messages to the cluster...
+>>> SHUTDOWN the node.
+51]# redis-trib.rb check 192.168.4.57:6357
+59]# /etc/init.d/redis_6379 start
+Starting Redis server...
+59]# redis-cli -h 192.168.4.59 -p 6359	//主库信息还存在
+192.168.4.59:6359> keys *
+1) "d"
+2) "y"
+**配置纯净的59redis服务器
+59]# /etc/init.d/redis_6379 start
+]# redis-cli -h 192.168.4.59 -p 6359
+192.168.4.59:6359> keys *
+1) "d"
+2) "y"
+192.168.4.59:6359> flushall
+OK
+192.168.4.59:6359> 
+192.168.4.59:6359> CLUSTER RESET
+OK
+192.168.4.59:6359> keys *
+(empty list or set)
+*注释掉启用集群配置项
+59 ]# vim /etc/redis/6379.conf
+70 bind 192.168.4.51	//修改ip
+93 port 6351	//原6379	//不允许相同,只指定物理接口的ip
+137 daemonize yes		//以守护进程方式运行
+159 pidfile /var/run/redis_6351.pid	
+816 #cluster-enabled yes	//是否启用集群,前提是以守护进程方式运行
+824 #cluster-config-file nodes-6351.conf	//存储集群信息的配置文件,自动生成,不允许相同
+830 #cluster-node-timeout 5000	//集群节点通信超时时长
+59]# /etc/init.d/redis_6379 start
+59]# cd /var/lib/redis/6379/
+59]# rm -rf nodes-6359.conf
+59]# /etc/init.d/redis_6379 start
+59]# netstat -utnlp | grep redis-server
+tcp        0      0 192.168.4.59:6359       0.0.0.0:*               LISTEN      974/redis-server 19 
+59]# redis-cli -h 192.168.4.59 -p 6359
+192.168.4.59:6359> keys *
+(empty list or set)
+192.168.4.59:6359> set name "hello"
+OK
+192.168.4.59:6359> get name
+"hello"
+192.168.4.59:6359> 
+
+***移除master57主机
+**先移除slots
+51]# redis-trib.rb reshard 192.168.4.51:6351
+>>> Performing Cluster Check (using node 192.168.4.51:6351)
+M: a671f0e08439beafdd2fbea68fa69a6103c12061 192.168.4.51:6351
+   slots:1365-5460 (4096 slots) master
+   1 additional replica(s)
+M: 8a96475c7d4c08e08a215df229770907bd856119 192.168.4.53:6353
+   slots:12288-16383 (4096 slots) master
+   1 additional replica(s)
+S: cefbb7a9688669884a9f83b423e52b6e20b2afd9 192.168.4.52:6352
+   slots: (0 slots) slave
+   replicates 1ffc6750bed807f0b79791cc2a3f7c2bea160324
+M: 1ffc6750bed807f0b79791cc2a3f7c2bea160324 192.168.4.58:6358
+   slots:6827-10922 (4096 slots) master
+   1 additional replica(s)
+M: 72f57fe19645f8a535e6ce7e61c1665cfb89ff81 192.168.4.57:6357
+   slots:0-1364,5461-6826,10923-12287 (4096 slots) master
+   0 additional replica(s)
+S: 6c590182e3d205e69c13e82a59100ef3015a6270 192.168.4.55:6355
+   slots: (0 slots) slave
+   replicates a671f0e08439beafdd2fbea68fa69a6103c12061
+S: 3c56d92b8da984234ba6670bdc7303a4c0577eb4 192.168.4.54:6354
+   slots: (0 slots) slave
+   replicates 8a96475c7d4c08e08a215df229770907bd856119
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+How many slots do you want to move (from 1 to 16384)? 4096	//主库57对应的slots数
+What is the receiving node ID?          
+Please enter all the source node IDs.8a96475c7d4c08e08a215df229770907bd856119   //主库57移到其它主库52的id
+  Type 'all' to use all the nodes as source nodes for the hash slots.
+  Type 'done' once you entered all the source nodes IDs.
+Source node #1:72f57fe19645f8a535e6ce7e61c1665cfb89ff81    //主库57对应的id 
+Source node #2:done	//结束
+51]# redis-trib.rb check 192.168.4.57:6357
+57]# redis-cli -h 192.168.4.57 -p 6357
+192.168.4.57:6357> keys *
+1) "d"
+2) "e"
+3) "a"
+4) "y"
+5) "x"
+192.168.4.57:6357> 
+**后移除id
+51]# redis-trib.rb del-node 192.168.4.57:6357 72f57fe19645f8a535e6ce7e61c1665cfb89ff81	//主库57的id
+51]# redis-trib.rb del-node 192.168.4.57:6357 72f57fe19645f8a535e6ce7e61c1665cfb89ff81
+>>> Removing node 72f57fe19645f8a535e6ce7e61c1665cfb89ff81 from cluster 192.168.4.57:6357
+>>> Sending CLUSTER FORGET messages to the cluster...
+>>> SHUTDOWN the node.
+注释:如若纯净的redis数据库,与slave59的操作一致
+
+部署redis集群步骤
+1.准备6台redis服务并启用集群配置
+2.部署管理主机
+3.创建集群
+4.测试集群
+5.管理集群
+5.1 添加新主机(master,slave)
+5.2 删除主机(master,slave)
+6.把删除的master或slave角色的redis服务器再添加到集群里的步骤:
+>cluster reset;
+>exit
+]# rm -rf /var/lib/redis/6379/*
+]# /etc/init.d/redis_6379 restart
+在管理主机上添加新主机
+7.redis集群什么情况下会无法访问
+一组主从数据库服务器宕机
+注释:创建集群需保证redis数据库无任何数据
+
+***redis主从复制
+1.一主一从
+2.主从从
+3.一主多从
+4.哨兵服务(难点)
+5.redis持久化
+6.redis数据类型
+**配置好50(客户端),56,57,59为纯净redis数据服务器
+*关闭51-55,58redis服务器
+]# redis-cli -h 192.168.4.5x -p 635x shutdown
+**1.一主(56)一从(57),客(50);一主(56)多从(57,59)
+57]# redis-cli -h 192.168.4.57 -p 6357
+192.168.4.57:6357> info replication
+# Replication
+role:master
+connected_slaves:0
+master_replid:19aa653fc17f18e23c0d29fadde83d1d92ac093b
+master_replid2:0000000000000000000000000000000000000000
+master_repl_offset:0
+second_repl_offset:-1
+repl_backlog_active:0
+repl_backlog_size:1048576
+repl_backlog_first_byte_offset:0
+repl_backlog_histlen:0
+192.168.4.57:6357> SLAVEOF 192.168.4.56 6356		//手动配置
+OK
+192.168.4.57:6357> info replication
+# Replication
+role:slave
+master_host:192.168.4.56
+master_port:6356
+master_link_status:up
+master_last_io_seconds_ago:2
+master_sync_in_progress:0
+slave_repl_offset:0
+slave_priority:100
+slave_read_only:1
+connected_slaves:0
+master_replid:f13c4b9ff3a2c29f94cba616c3525830ad66232f
+master_replid2:0000000000000000000000000000000000000000
+master_repl_offset:0
+second_repl_offset:-1
+repl_backlog_active:1
+repl_backlog_size:1048576
+repl_backlog_first_byte_offset:1
+repl_backlog_histlen:0
+192.168.4.57:6357> 
+56]# redis-cli -h 192.168.4.56 -p 6356
+192.168.4.56:6356> info replication
+# Replication
+role:master
+connected_slaves:1
+slave0:ip=192.168.4.57,port=6357,state=online,offset=84,lag=0
+master_replid:f13c4b9ff3a2c29f94cba616c3525830ad66232f
+master_replid2:0000000000000000000000000000000000000000
+master_repl_offset:84
+second_repl_offset:-1
+repl_backlog_active:1
+repl_backlog_size:1048576
+repl_backlog_first_byte_offset:1
+repl_backlog_histlen:84
+192.168.4.56:6356> 
+50]# redis-cli -h 192.168.4.56 -p 6356
+192.168.4.56:6356> ping
+PONG
+192.168.4.56:6356> set x 1
+OK
+192.168.4.56:6356> set y 2
+OK
+192.168.4.56:6356> set z 3
+OK
+192.168.4.56:6356> 
+56]# redis-cli -h 192.168.4.56 -p 6356
+192.168.4.56:6356> keys *
+1) "y"
+2) "z"
+3) "x"
+192.168.4.56:6356>
+57]# redis-cli -h 192.168.4.56 -p 6356
+192.168.4.57:6357> keys *
+1) "x"
+2) "z"
+3) "y"
+192.168.4.57:6357> 
+注释:
+1.从库只能查看,不能设置
+2.手动配置命令
+192.168.4.5x:635x> SLAVEOF 192.168.4.5x 635x	//指向主库
+192.168.4.5x:635x> SLAVEOF no one //临时取消从库,暂为主库
+2.主从复制永久生效,配置文件/etc/redis/6379.conf
+57]# vim /etc/redis/6379.conf
+282 slaveof 192.168.4.56 6356
+283 # slaveof <masterip> <masterport>	//原文件
+57]# redis-cli -h 192.168.4.57 -p 6357 shutdown
+57]# /etc/init.d/redis_6379 start
+**56主库设置密码登陆
+56]# vim /etc/redis/6379.conf
+561 requirepass 123456
+56]# vim /etc/init.d/redis_6379
+43             $CLIEXEC -h 192.168.4.56 -p 6356 -a 123456 shutdown
+59]# redis-cli -h 192.168.4.56 -p 6356 shutdown
+56]# /etc/init.d/redis_6379 start
+56]# redis-cli -h 192.168.4.56 -p 6356 -a 123456
+50]# redis-cli -h 192.168.4.56 -p 6356 -a 123456
+*57从库配置同步密码
+57]# vim /etc/redis/6379.conf
+289 masterauth 123456
+57]# redis-cli -h 192.168.4.57 -p 6357 shutdown
+57]# /etc/init.d/redis_6379 start
+注释:命令行临时变更密码
+192.168.4.5x:635x> config set masterauth "123456"
+192.168.4.5x:635x> config set requestpass "123456"
+
+*2.主(56)从(57)从(59)
+59]# vim /etc/redis/6379.conf
+282 slaveof 192.168.4.57 6357
+289 #masterauth 123456
+59]# redis-cli -h 192.168.4.59 -p 6359 shutdown
+57]# /etc/init.d/redis_6379 start
+
+***配置哨兵服务(作用:监视master服务)
+**哨兵(58),主(56)从(57)从(59),主(54)从(55)
+58]# vim /etc/sentinel.conf
+     1	bind 0.0.0.0
+     2	sentinel monitor redis54 192.168.4.54 6354 1
+     3	#sentinel auth-pass redis54 密码	//如有密码,加上此行
+58]# redis-sentinel /etc/sentinel.conf
+... ...
+5913:X 13 Dec 22:09:31.492 # WARNING: The TCP backlog setting of 511 cannot be enforced because /proc/sys/net/core/somaxconn is set to the lower value of 128.
+5913:X 13 Dec 22:09:31.545 # Sentinel ID is 5f87c29d9f0347490d00bb241291bd17d623dd6f
+5913:X 13 Dec 22:09:31.545 # +monitor master redis54 192.168.4.54 6354 quorum 1
+... ...
+54]# redis-cli -h 192.168.4.54 -p 6354
+192.168.4.54:6354> SHUTDOWN
+not connected> EXIT
+58]
+... ...
+5913:X 13 Dec 22:12:51.220 # +promoted-slave slave 192.168.4.55:6355 192.168.4.55 6355 @ redis54 192.168.4.54 6354
+5913:X 13 Dec 22:12:51.220 # +failover-state-reconf-slaves master redis54 192.168.4.54 6354
+5913:X 13 Dec 22:12:51.248 # +failover-end master redis54 192.168.4.54 6354
+5913:X 13 Dec 22:12:51.248 # +switch-master redis54 192.168.4.54 6354 192.168.4.55 6355
+5913:X 13 Dec 22:12:51.248 * +slave slave 192.168.4.54:6354 192.168.4.54 6354 @ redis54 192.168.4.55 6355
+5913:X 13 Dec 22:13:21.275 # +sdown slave 192.168.4.54:6354 192.168.4.54 6354 @ redis54 192.168.4.55 6355
+... ...
+55]# redis-cli -h 192.168.4.55 -p 6355
+192.168.4.55:6355> INFO REPLICATION
+# Replication
+role:master
+connected_slaves:0
+master_replid:bbd8530529b38c39052bdf9e32ff000120b0c581
+master_replid2:86da6123a150f488ad13b5b388848d9f3c2fb385
+master_repl_offset:13701
+second_repl_offset:9815
+repl_backlog_active:1
+repl_backlog_size:1048576
+repl_backlog_first_byte_offset:1
+repl_backlog_histlen:13701
+192.168.4.55:6355> 
+
+***redis数据库持久化
+**RDB-snaps快照
+50] cd /var/lib/redis/6379/
+50] ls
+50] rm -rf *
+50] ls
+50] netstat -utnlp | grep :6379
+50] /etc/init.d/redis_6379 start
+50] ls
+50] redis-cli
+127.0.0.1:6379> keys *
+(empty list or set)
+127.0.0.1:6379> set AI "人工智能"
+OK
+127.0.0.1:6379> set cloud "云"
+OK
+127.0.0.1:6379> set bigdata "大叔据"
+OK
+127.0.0.1:6379>
+50] ls	//如果命令行不输入save,需要在900s之后才会生成dump.rdb文件
+50]# ls
+dump.rdb
+[root@mysql50 6379]# redis-cli
+127.0.0.1:6379> keys *
+1) "bigdata"
+2) "AI"
+3) "cloud"
+127.0.0.1:6379> get AI
+"\xe4\xba\xba\xe5\xb7\xa5\xe6\x99\xba\xe8\x83\xbd"
+127.0.0.1:6379> SHUTDOWN
+]# vim /etc/redis/6379.conf
+254 dbfilename dump.rdb	//文件名
+217 #   save ""	//禁用RDB
+218 
+219 save 900 1	//600s内且有1次修改
+220 save 300 10	//300s内且有10次修改
+221 save 60 10000	//60s内且有10000次修改
+]# cp dump.rdb /root/
+]# rm -rf dump.rdb
+]# /etc/init.d/redis_6379 start
+# redis-cli
+127.0.0.1:6379> keys *
+(empty list or set)
+127.0.0.1:6379> SHUTDOWN
+not connected> exit
+]# cp /root/dump.rdb ./
+]# /etc/init.d/redis_6379 start
+]# redis-cli
+127.0.0.1:6379> keys *
+1) "AI"
+2) "cloud"
+3) "bigdata"
+127.0.0.1:6379>
+注释:redis数据库恢复,必须要保证redis服务down掉,否则,恢复无效
+**ROF(只做追加操作的文件)
+]# vim /etc/redis/6379.conf
+673 appendonly yes	//默认no,yes为启用aof
+677 appendfilename "appendonly.aof	//指定文件名
+703 appendfsync everysec
+]# /etc/init.d/redis_6379 stop
+]# /etc/init.d/redis_6379 start
+]# redis-cli		//RDB,ROF同时存在时,ROF优先
+127.0.0.1:6379> keys *
+(empty list or set)
+127.0.0.1:6379> 
+]# ls
+appendonly.aof  dump.rdb
+]# cat -n appendonly.aof
+]# redis-cli
+127.0.0.1:6379> set q 1
+OK
+127.0.0.1:6379> set p 2
+OK
+127.0.0.1:6379> set w 3
+OK
+127.0.0.1:6379> exit
+]# cat -n appendonly.aof 
+     1	*2
+     2	$6
+     3	SELECT
+     4	$1
+     5	0
+     6	*3
+     7	$3
+     8	set
+     9	$1
+    10	q
+    11	$1
+    12	1
+    13	*3
+    14	$3
+    15	set
+    16	$1
+    17	p
+    18	$1
+    19	2
+    20	*3
+    21	$3
+    22	set
+    23	$1
+    24	w
+    25	$1
+    26	3
+]# redis-cli
+127.0.0.1:6379> keys *
+1) "p"
+2) "w"
+3) "q"
+127.0.0.1:6379> 
+注释:备份,恢复数据与RDB一致,必须先downREDIS服务
+补充:redis持久化,同时启用RDB,ROF,可以起到互补的效果
+
+总结:
+1.搭建redis服务器
+2.LNMP+REDIS
+3.部署redis集群
+4.部署redis主从复制
+5.持久化:AOF && RDB
+6.数据类型及对应管理命令
+
+
+***搭建MongoDB服务器(MongoDB基于分布式存储的数据库)
+#58机
+**装包
+]# scp mongodb-linux-x86_64-rhel70-3.6.3.tgz 192.168.4.58:/root/
+]# mkdir /usr/local/mongodb
+]# tar -zxf mongodb-linux-x86_64-rhel70-3.6.3.tgz
+]# cp -r mongodb-linux-x86_64-rhel70-3.6.3/bin /usr/local/mongodb/
+]# cd /usr/local/mongodb/
+]# mkdir -p etc log data/db
+# etc	//创建存放配置文件的目录
+# log	//创建存放日志文件的目录
+# log	//创建存放数据库文件的目录db
+]# ls
+bin  data  etc  log
+**手动配置服务主配置文件
+]# vim etc/mongodb.conf
+logpath=/usr/local/mongodb/log/mongodb.log	//指定日志文件
+logappend=true					//追加的方式记录日志信息
+dbpath=/usr/local/mongodb/data/db		//指定数据库目录
+fork=true						//服务器以守护进程的方式运行
+**设置PATH变量
+]# vim /etc/profile
+78 export PATH="/usr/local/mongodb/bin:$PATH"
+]# source /etc/profile
+**启动服务
+]# mongod -f /usr/local/mongodb/etc/mongodb.conf 
+about to fork child process, waiting until server is ready for connections.
+forked process: 15959
+child process started successfully, parent exiting	//启动成功
+**验证配置,默认端口为27017
+]# ls /usr/local/mongodb/data/db/
+collection-0-65507881681701930.wt  index-1-65507881681701930.wt  _mdb_catalog.wt  storage.bson      WiredTiger.lock
+collection-2-65507881681701930.wt  index-3-65507881681701930.wt  mongod.lock      WiredTiger        WiredTiger.turtle
+diagnostic.data                    journal                       sizeStorer.wt    WiredTigerLAS.wt  WiredTiger.wt
+]# ps -C mongod
+  PID TTY          TIME CMD
+15959 ?        00:00:01 mongod
+[root@mysql58 mongodb]# ss -ntlpu | grep mongod
+tcp    LISTEN     0      128    127.0.0.1:27017                 *:*                   users:(("mongod",pid=15959,fd=11))
+**连接服务
+[root@mysql58 mongodb]# mongo	//默认本地连接,没有密码
+... ...
+> show dbs		//显示已有的库
+admin   0.000GB
+config  0.000GB
+local   0.000GB
+> db			//查看当前所在库
+test	
+> exit		//退出
+bye
+**停止服务
+[root@mysql58 mongodb]# mongod --dbpath=/usr/local/mongodb/data/db/ --shutdown
+killing process with pid: 15959
+注释:启动,停止服务起别名
+停止]# alias cmdb="mongod --dbpath=/usr/local/mongodb/data/db/ --shutdown"
+开启]# alias smdb="mongod -f /usr/local/mongodb/etc/mongodb.conf"
+**修改配置文件,使用ip和端口连接服务
+]# vim /usr/local/mongodb/etc/mongodb.conf
+bind_ip=192.168.4.58
+port=27077
+logpath=/usr/local/mongodb/log/mongodb.log
+logappend=true
+dbpath=/usr/local/mongodb/data/db/
+fork=true
+]# mongod -f /usr/local/mongodb/etc/mongodb.conf 
+]# mongo --host 192.168.4.58 --port 27077
+MongoDB shell version v3.6.3
+connecting to: mongodb://192.168.4.58:27077/
+MongoDB server version: 3.6.3
+... ...
+[root@mysql58 ~]# ps -C mongod
+  PID TTY          TIME CMD
+16397 ?        00:00:01 mongod
+[root@mysql58 ~]# ss -utpnl | grep mongod
+tcp    LISTEN     0      128    192.168.4.58:27077                 *:*                   users:(("mongod",pid=16397,fd=11))
+**连接起别名
+[root@mysql58 ~]# alias ilink="mongo --host 192.168.4.58 --port 27077"
+
+***mongodb备份,还原数据库
+**默认备份所有,自动生成dump目录
+[root@mysql58 bin]# mongodump --host 192.168.4.58 --port 27077
+[root@mysql58 bin]# ls
+dump
+#查看bson文件内容
+[root@mysql58 ~]# cd /usr/local/mongodb/data/db/
+[root@mysql58 db]# bsondump storage.bson 
+{"storage":{"engine":"wiredTiger","options":{"directoryPerDB":false,"directoryForIndexes":false,"groupCollections":false}}}
+2018-12-14T17:48:03.331+0800	1 objects found
+**备份指定库的指定集合到目录
+[root@mysql58 bin]# mongodump --host 192.168.4.58 --port 27077 -d t1 -c t3 -o t1_t3
+2018-12-14T19:20:51.528+0800	writing t1.t3 to 
+2018-12-14T19:20:51.530+0800	done dumping t1.t3 (1 document)
+**数据恢复
+//恢复所有
+[root@mysql58 bin]# mongorestore --host 192.168.4.58 --port 27077 dump	
+//恢复指定库的指定集合
+[root@mysql58 bin]# mongorestore --host 192.168.4.58 --port 27077 -d t1 -c t3 -o t1_t3/t1_t3
+
+***数据导出,导入
+**导出
+#json格式
+[root@mysql58 bin]# ./mongoexport --host 192.168.4.58 --port 27077 -d admin -c system.version --type=json >/root/version.json
+2018-12-14T17:59:35.806+0800	connected to: 192.168.4.58:27077
+2018-12-14T17:59:35.807+0800	exported 1 record
+[root@mysql58 bin]# cat -n /root/version.json 
+     1	{"_id":"featureCompatibilityVersion","version":"3.6"}
+#csv格式,必须指定:-f 字段名1,...
+[root@mysql58 bin]# ./mongoexport --host 192.168.4.58 --port 27077 -d admin -c system.version -f 姓名,婚姻 --type=csv >/root/version.csv >/root/t2.csv
+2018-12-14T18:58:10.012+0800	connected to: 192.168.4.58:27077
+2018-12-14T18:58:10.014+0800	exported 2 records
+[root@mysql58 bin]# cat -n /root/t2.csv 
+     1	姓名,婚姻
+     2	张三,false
+     3	李斯,true
+**导入
+#json格式
+[root@mysql58 bin]# ./mongoimport --host 192.168.4.58 --port 27077 -d t4 -c system.version --type=json /root/version.json
+#csv
+[root@mysql58 bin]# ./mongoimport --host 192.168.4.58 --port 27077 -d t1 -c t2 --type=csv --headerline --drop /root/t2.csv
+2018-12-14T19:10:24.709+0800	connected to: 192.168.4.58:27077
+2018-12-14T19:10:24.710+0800	dropping: t1.t2
+2018-12-14T19:10:24.853+0800	imported 2 documents
+注释:
+1.导入数据时,若库和集合不存在,则先创建库和集合后在导入数据;
+2.若库和集合已存在,则以追加的方式导入数据到集合里;
+3.使用--drop选项可以删除原数据后导入新数据,--headerline 忽略标题,两个选项需一并使用
+
+
+***mongodb副本集
+**配置3台mongodb数据库(57-59)
+57-59]# vim etc/mongodb.conf
+bind_ip=192.168.4.5x
+port=2635x
+replSet=rs1
+logpath=/usr/local/mongodb/log/mongodb.log
+logappend=true
+dbpath=/usr/local/mongodb/data/db/
+fork=true
+
+
+> rs1_config={
+... _id="rs1",
+... members:[
+... {_id:0,host:"192.168.4.57:26357"},
+... {_id:1,host:"192.168.4.58:26358"},
+... {_id:2,host:"192.168.4.59:26359"}
+... ]
+... };
+
+
+rs1_config={ _id="rs1", members:[ {_id:1,host:"192.168.4.57:26357"}, {_id:2,host:"192.168.4.58:26358"}, {_id:3,host:"192.168.4.59:26359"} ] };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
